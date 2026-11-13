@@ -1,4 +1,4 @@
-
+"""
 Offline seminar demo: Function Calling + MCP-style tool interaction for 5G diagnostics.
 
 No API key, internet connection, or third-party package is required.
@@ -14,6 +14,11 @@ This is a deterministic simulation of the agent's tool-selection step:
 
 It demonstrates the architecture and control flow, not a live LLM or a real MCP
 network connection. The UE and AMF data are mock data for the seminar.
+
+Key distinction:
+- An agent/LLM reasons about the user's request, selects tools, and interprets results.
+- MCP exposes tools and their schemas so an agent can discover and call them.
+- The MCP client/host validates calls, executes them through the server, and returns results.
 """
 import argparse
 import json
@@ -46,13 +51,18 @@ TOOL_SCHEMAS = {
     },
 }
 
-# Mock network state. UE 2 is offline because of an AMF authentication failure.
+# Mock network state. All valid UE IDs are available; UE 2 remains offline
+# because of an AMF authentication failure.
 UE_STATE = {
-    1: {"ue_id": 1, "REGISTERED": True},
-    2: {"ue_id": 2, "REGISTERED": False},
-    3: {"ue_id": 3, "REGISTERED": True},
+    ue_id: {"ue_id": ue_id, "REGISTERED": False}
+    for ue_id in range(1, 1000)
 }
-AMF_AUTHENTICATED = {1: True, 2: False, 3: True}
+UE_STATE[1]["REGISTERED"] = True
+UE_STATE[3]["REGISTERED"] = True
+AMF_AUTHENTICATED = {
+    ue_id: ue_id in (1, 3)
+    for ue_id in range(1, 1000)
+}
 CORE_LOGS = {
     "AMF": {"component": "AMF", "cause": "authentication failure"},
     "SMF": {"component": "SMF", "status": "no recent errors"},
@@ -163,6 +173,19 @@ def choose_next_call(user_prompt: str, previous_results=None):
     return None
 
 
+def show_architecture_overview():
+    """Explain how the agent, MCP client, and MCP server interact."""
+    print("MCP AND AGENTS")
+    print("  Agent/LLM: reasons about the request and selects the next tool.")
+    print("  MCP: exposes discoverable tools, schemas, parameters, and results.")
+    print("  MCP client/host: validates arguments, dispatches the call, and handles errors.")
+    print("  Interaction: agent -> tool selection -> MCP validation -> tool execution")
+    print("              -> tool result -> agent interpretation -> next action.")
+    print("\nFUNCTION-CALLING PIPELINE")
+    print("  Function calling | tool selection | tool schema | parameters")
+    print("  validation       | tool results   | error handling")
+
+
 def run_diagnostic(prompt: str):
     print("=" * 68)
     print("USER:", prompt)
@@ -253,8 +276,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.interactive:
+        show_architecture_overview()
         interactive()
     else:
+        show_architecture_overview()
         run_diagnostic("Why is UE 2 offline?")
         if args.validation:
             show_validation_examples()
